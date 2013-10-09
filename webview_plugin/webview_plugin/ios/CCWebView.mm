@@ -88,6 +88,43 @@
 
 @end
 
+
+@interface ScrollViewDelegate : NSObject<UIScrollViewDelegate>
+{
+    // store c++ instance information related to this delegate
+    void *object;
+}
+
+@end
+
+
+/* This delegate forbidens x-direction scroll */
+@implementation ScrollViewDelegate
+
+-(id)initWithDelegate:(void *)delegate
+{
+    self = [super init];
+    object = delegate;
+    return self;
+}
+- (BOOL)scrollViewShouldScrollToTop:(UIScrollView *)scrollView
+{
+    return YES;
+}
+
+- (void)scrollViewDidScrollToTop:(UIScrollView *)scrollView
+{
+}
+
+- (void)scrollViewDidScroll:(id)scrollView
+{
+    CGPoint origin = [scrollView contentOffset];
+    [scrollView setContentOffset:CGPointMake(0.0, origin.y)];
+}
+@end
+
+
+
 namespace cocos2d { namespace webview_plugin {
 
 CCWebViewDelegate *CCWebView::s_pWebViewDelegate = NULL;
@@ -116,20 +153,53 @@ CCWebView* CCWebView::create(){
     [uiView setCCWebView:webview];
     
     uiView.delegate = (id<UIWebViewDelegate>)[[WebViewDelegate alloc] initWithDelegate:(void *)webview];
+    
+    // Forbidden X-direction scroll
+    if(uiView.scrollView){
+        uiView.scrollView.delegate = (id<UIScrollViewDelegate>)[[ScrollViewDelegate alloc] initWithDelegate:(void *)webview];
+    }
+
+    // Hide Border (for iPad)
+    for (UIView *view in [[[uiView subviews] objectAtIndex:0] subviews]) {
+        if ([view isKindOfClass:[UIImageView class]]) view.hidden = YES;
+    }
+    
     return webview;
+}
+    
+CGPoint convertDesignCoordToScreenCoord(const CCPoint& designCoord)
+{
+    CCEGLViewProtocol* eglView = CCEGLView::sharedOpenGLView();
+    float viewH = (float)[[EAGLView sharedEGLView] getHeight];
+    CCPoint visiblePos = CCPointMake(designCoord.x * eglView->getScaleX(), designCoord.y * eglView->getScaleY());
+    CCPoint screenGLPos = visiblePos +  eglView->getViewPortRect().origin;
+    CGPoint screenPos = CGPointMake(screenGLPos.x, viewH - screenGLPos.y);
+    screenPos.x = screenPos.x /  [[EAGLView sharedEGLView] contentScaleFactor] ;
+    screenPos.y = screenPos.y /  [[EAGLView sharedEGLView] contentScaleFactor] ;
+    
+    return screenPos;
+}
+
+CGSize convertDesignSizeToScreenSize(const CCSize& size)
+{
+    CCEGLViewProtocol* eglView = CCEGLView::sharedOpenGLView();
+    CGSize controlSize = CGSizeMake(size.width * eglView->getScaleX(),size.height * eglView->getScaleY());
+    controlSize.width /=  [[EAGLView sharedEGLView] contentScaleFactor] ;
+    controlSize.height /=  [[EAGLView sharedEGLView] contentScaleFactor] ;
+    return controlSize;
 }
 
 inline CGRect getRectForIOS(int x, int y, int w, int h) {
-    UIView *view = [EAGLView sharedEGLView];
-    CCSize designSize = CCEGLView::sharedOpenGLView()->getDesignResolutionSize();
-    CGFloat frameHeight = view.frame.size.height;
-    CGFloat offset = (frameHeight - designSize.height) / 2;
-    return CGRectMake(x, frameHeight - y - h - offset, w, h);
+    CGPoint point = convertDesignCoordToScreenCoord(CCPointMake(x,y + h));
+    CGSize size = convertDesignSizeToScreenSize(CCSizeMake(w,h));
+    CCLog("getRectForIOS %f %f %f %f", point.x, point.y, size.width, size.height);
+    return CGRectMake(point.x, point.y, size.width, size.height);
 }
     
 void CCWebView::setRect(int x, int y, int w, int h){
     UIWebView *uiView = (UIWebView*)mWebView;
     uiView.frame = getRectForIOS(x, y, w, h);
+    uiView.scalesPageToFit = YES;
 }
 
 void CCWebView::loadUrl(const char *url, bool transparent/* =false */){
@@ -180,6 +250,11 @@ CCString* CCWebView::evaluateJS(const char* js){
 void CCWebView::destroy(){
     if (mWebView) {
         UIWebView *uiView = (UIWebView*)mWebView;
+        if(uiView.scrollView){
+            ScrollViewDelegate *scrollViewDelegate =  uiView.scrollView.delegate;
+            uiView.scrollView.delegate = nil;
+            [scrollViewDelegate release];
+        }
         WebViewDelegate *delegate = uiView.delegate;
         [delegate release];
         [uiView removeFromSuperview];
@@ -213,6 +288,13 @@ bool CCWebView::handleShouldOverrideUrlLoading(const char* url) {
 }
     
 void CCWebView::handleOnPageFinished(const char* url) {
+    UIWebView *uiView = (UIWebView*)mWebView;
+    
+    //adjust width (for iPad)
+    if(uiView.scrollView){
+        [uiView.scrollView setZoomScale:(uiView.frame.size.width/ uiView.scrollView.contentSize.width) animated:NO];
+    }
+    
     CCWebViewDelegate *delegate = CCWebView::getWebViewDelegate();
     if (delegate) {
         CCString *str = CCString::create(url);
