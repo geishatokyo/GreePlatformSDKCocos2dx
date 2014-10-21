@@ -3,8 +3,6 @@
 #import "EAGLView.h"
 #import "CCFileUtils.h"
 #import "CCEGLView.h"
-#include "SimpleAudioEngine.h"
-#include "SimpleAudioEngine_objc.h"
 
 @interface UIWebViewWithCloseHandler : UIWebView
 {
@@ -231,7 +229,9 @@ void CCWebView::destroy(){
         mWebView = NULL;
     }
     if (mCloseButton) {
-        CocosDenshion::SimpleAudioEngine::sharedEngine()->playEffect("bundles/tap.mp3"); // 効果音を鳴らす
+        if(m_target && m_selector){
+            (m_target->*m_selector)();
+        }
         UIView* button = (UIView*)mCloseButton;
         [button removeFromSuperview];
         [button release];
