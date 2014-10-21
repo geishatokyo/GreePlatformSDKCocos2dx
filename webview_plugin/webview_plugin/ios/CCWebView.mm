@@ -219,6 +219,7 @@ CCString* CCWebView::evaluateJS(const char* js){
 }
 
 void CCWebView::destroy(){
+    // ウェブを閉じる際の処理
     if (mWebView) {
         UIWebView *uiView = (UIWebView*)mWebView;
         WebViewDelegate *delegate = uiView.delegate;
@@ -228,6 +229,9 @@ void CCWebView::destroy(){
         mWebView = NULL;
     }
     if (mCloseButton) {
+        if(m_target && m_selector){
+            (m_target->*m_selector)();
+        }
         UIView* button = (UIView*)mCloseButton;
         [button removeFromSuperview];
         [button release];

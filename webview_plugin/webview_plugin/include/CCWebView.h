@@ -58,6 +58,13 @@ class CCWebView : public CCObject {
         // バウンス時のエフェクトや、iPadで発生する不自然なボーダーを消す
         void disableEffect();
 
+        CCObject* m_target;
+        SEL_CallFunc m_selector;
+        void setWebViewCallBack(CCObject* target, SEL_CallFunc selector){
+            m_target = target;
+            m_selector = selector;
+        }
+
         // この下で定義された変数などはPrivateになる
 		CREATE_DELEGATE(WebViewDelegate);
     
